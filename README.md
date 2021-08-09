@@ -28,7 +28,7 @@ You can also install this stored procedure in other databases if you want to.
 Run sp_ClusterInfo using the master database or the database where you installed the stored procedure.
 
 Parameter/s:
-  @Help = 1 - displays the help information. 
+* @Help = 1 - displays the help information. 
 
 [*Back to top*](#header1)
 
