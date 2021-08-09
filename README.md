@@ -1,7 +1,7 @@
 # sp_ClusterInfo
 <a name="header1"></a>
 
-Navigation
+# Navigation
 - [How to install the script](#how-to-install-the-script)
 - [How to use the stored procedure](#how-to-use-the-stored-procedure)
 - [License MIT](#license)
