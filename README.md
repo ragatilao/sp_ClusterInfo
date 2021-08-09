@@ -3,7 +3,7 @@
 
 Navigation
 - [How to install the script](#how-to-install-the-script)
-- [How to use the script](#how-to-use-the-stored-procedure)
+- [How to use the stored procedure](#how-to-use-the-stored-procedure)
 - [License MIT](#license)
  
  
