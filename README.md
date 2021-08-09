@@ -34,6 +34,6 @@ Parameter/s:
 
 ## License
 
-[The stored procedure, sp_ClusterInfo uses the MIT License.](LICENSE.md)
+[The stored procedure, sp_ClusterInfo uses the MIT License.](LICENSE)
 
 [*Back to top*](#header1)
