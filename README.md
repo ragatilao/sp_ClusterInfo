@@ -34,6 +34,6 @@ Parameter/s:
 
 ## License
 
-[The Powershel script, Check Installed Software Version uses the MIT License.](LICENSE.md)
+[The stored procedure, sp_ClusterInfo uses the MIT License.](LICENSE.md)
 
 [*Back to top*](#header1)
