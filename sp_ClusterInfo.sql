@@ -63,7 +63,7 @@ END;    /* @Help = 1 */
 DECLARE @SQLServerMajorBuildVersion AS INT 
 SELECT @SQLServerMajorBuildVersion = LEFT(CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR), CHARINDEX('.',CAST(SERVERPROPERTY('ProductVersion') AS VARCHAR))-1)
 
-IF @SQLServerMajorBuildVersion < 12
+IF @SQLServerMajorBuildVersion < 11
 BEGIN
        IF (SELECT SERVERPROPERTY('IsClustered')) = 1
        BEGIN
@@ -186,4 +186,5 @@ BEGIN
               END
        END
 END;
+
 
