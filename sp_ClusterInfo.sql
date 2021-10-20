@@ -97,25 +97,70 @@ BEGIN
 END
 ELSE
 BEGIN
-       IF (SELECT SERVERPROPERTY('IsHadrEnabled')) = 1 AND (SELECT SERVERPROPERTY('IsClustered')) = 1
+       DECLARE @AOFCI AS INT, @AOAG AS INT, @HAType AS VARCHAR(10), @errmsg AS VARCHAR(200)
+
+       SELECT @AOAG = CAST(SERVERPROPERTY('IsHadrEnabled') AS INT)
+       SELECT @AOFCI = CAST(SERVERPROPERTY('IsClustered') AS INT)
+
+       IF (SELECT COUNT(DISTINCT join_state_desc) FROM sys.dm_hadr_availability_replica_cluster_states) = 2 
+       BEGIN --if count is 2 both JOINED_STANDALONE and JOINED_FCI is configured
+              SET @AOFCI = 1
+       END
+
+       SELECT @HAType =
+       CASE
+              WHEN @AOFCI = 1 AND @AOAG =1 THEN 'FCIAG'
+              WHEN @AOFCI = 1 AND @AOAG =0 THEN 'FCI'
+              WHEN @AOFCI = 0 AND @AOAG =1 THEN 'AG'
+              ELSE 'STANDALONE'
+       END
+
+       IF @HAType = 'FCIAG'
        BEGIN
-              SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName
-              ,UPPER(ar.replica_server_name) AS ServerName
-              ,SERVERPROPERTY('IsClustered') AS IsClustered
-              ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
-              ,ag.name AS AvailabilityGroupName
-              ,agl.dns_name AS AvailabilityGroupListenerName
-                       ,CASE ar.replica_server_name WHEN dhags.primary_replica THEN 'PRIMARY'
-                       ELSE 'SECONDARY'
-              END AS HighAvailabilityRoleDesc
-              ,'FCI/AG' AS SQLServerClusteringMethod
-              ,@@VERSION AS SQLServerVersion  
-              FROM sys.availability_groups AS ag
-              LEFT OUTER JOIN sys.availability_replicas AS ar ON ag.group_id = ar.group_id
-              LEFT OUTER JOIN sys.availability_group_listeners AS agl ON ag.group_id = agl.group_id
-                       LEFT OUTER JOIN sys.dm_hadr_availability_group_states as dhags ON ag.group_id = dhags.group_id
-              WHERE UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) <> ar.replica_server_name
-              UNION ALL
+              IF (SELECT COUNT(NodeName) FROM sys.dm_os_cluster_nodes) <> 0
+              BEGIN
+                     SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName
+                     ,UPPER(ar.replica_server_name) AS ServerName
+                     ,SERVERPROPERTY('IsClustered') AS IsClustered
+                     ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
+                     ,ag.name AS AvailabilityGroupName
+                     ,agl.dns_name AS AvailabilityGroupListenerName
+                                  ,CASE ar.replica_server_name WHEN dhags.primary_replica THEN 'PRIMARY'
+                                  ELSE 'SECONDARY'
+                     END AS HighAvailabilityRoleDesc
+                     ,'FCI/AG' AS SQLServerClusteringMethod
+                     ,@@VERSION AS SQLServerVersion  
+                     FROM sys.availability_groups AS ag
+                     LEFT OUTER JOIN sys.availability_replicas AS ar ON ag.group_id = ar.group_id
+                     LEFT OUTER JOIN sys.availability_group_listeners AS agl ON ag.group_id = agl.group_id
+                     LEFT OUTER JOIN sys.dm_hadr_availability_group_states as dhags ON ag.group_id = dhags.group_id
+                     WHERE UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) <> ar.replica_server_name
+                     UNION ALL
+                     SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName  
+                     ,UPPER(NodeName) AS ServerName
+                     ,SERVERPROPERTY('IsClustered') AS IsClustered
+                     ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
+                     ,NULL AS AvailabilityGroupName
+                     ,NULL AS AvailabilityGroupListenerName
+                     ,CASE is_current_owner 
+                                  WHEN 1 THEN 'PRIMARY'
+                                  ELSE 'SECONDARY'
+                     END AS HighAvailabilityRoleDesc
+                     ,'FCI/AG' AS SQLServerClusteringMethod
+                     ,@@VERSION AS SQLServerVersion
+                     FROM sys.dm_os_cluster_nodes
+                     ORDER BY 5,2;  
+              END
+              ELSE 
+              BEGIN
+                     SET @errmsg = 'High Availability configuration is FCI with Availability Group. Please run this in the Primary Node ' + (select primary_replica from sys.dm_hadr_availability_group_states) + ' to get the correct information.'
+                     SELECT @errmsg AS Error
+                     PRINT 'Error: ' + @errmsg 
+              END
+       END;
+
+       IF @HAType = 'FCI'
+       BEGIN
               SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName  
               ,UPPER(NodeName) AS ServerName
               ,SERVERPROPERTY('IsClustered') AS IsClustered
@@ -123,68 +168,47 @@ BEGIN
               ,NULL AS AvailabilityGroupName
               ,NULL AS AvailabilityGroupListenerName
               ,CASE is_current_owner 
-                     WHEN 1 THEN 'PRIMARY'
-                     ELSE 'SECONDARY'
+                           WHEN 1 THEN 'PRIMARY'
+                           ELSE 'SECONDARY'
               END AS HighAvailabilityRoleDesc
-              ,'FCI/AG' AS SQLServerClusteringMethod
+              ,'FCI' AS SQLServerClusteringMethod
               ,@@VERSION AS SQLServerVersion  
               FROM sys.dm_os_cluster_nodes
-              ORDER BY 5,2;  
-       END
-       ELSE
+              ORDER BY NodeName;  
+       END;
+
+       IF @HAType = 'AG'
        BEGIN
-              IF (SELECT SERVERPROPERTY('IsHadrEnabled')) = 1 
-              BEGIN
-				   SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName
-				   ,UPPER(ar.replica_server_name) AS ServerName
-				   ,SERVERPROPERTY('IsClustered') AS IsClustered
-				   ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
-				   ,ag.name AS AvailabilityGroupName
-				   ,agl.dns_name AS AvailabilityGroupListenerName
-				   ,CASE ar.replica_server_name WHEN dhags.primary_replica THEN 'PRIMARY'
-				   ELSE 'SECONDARY'
-				   END AS HighAvailabilityRoleDesc
-				   ,'AG' AS SQLServerClusteringMethod
-				   ,@@VERSION AS SQLServerVersion
-				   FROM sys.availability_groups AS ag
-				   LEFT OUTER JOIN sys.availability_replicas AS ar ON ag.group_id = ar.group_id
-				   LEFT OUTER JOIN sys.availability_group_listeners AS agl ON ag.group_id = agl.group_id
-				   LEFT OUTER JOIN sys.dm_hadr_availability_group_states as dhags ON ag.group_id = dhags.group_id
-				   ORDER BY 5,2;  
-              END
-              ELSE 
-              BEGIN
-                     IF (SELECT SERVERPROPERTY('IsClustered')) = 1
-                     BEGIN
-                           SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName  
-                           ,UPPER(NodeName) AS ServerName
-                           ,SERVERPROPERTY('IsClustered') AS IsClustered
-                           ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
-                           ,NULL AS AvailabilityGroupName
-                           ,NULL AS AvailabilityGroupListenerName
-                           ,CASE is_current_owner 
-                                  WHEN 1 THEN 'PRIMARY'
-                                  ELSE 'SECONDARY'
-                           END AS HighAvailabilityRoleDesc
-                           ,'FCI' AS SQLServerClusteringMethod
-                           ,@@VERSION AS SQLServerVersion  
-                           FROM sys.dm_os_cluster_nodes
-                           ORDER BY NodeName;  
-                     END
-                     ELSE
-                     BEGIN
-                           SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName  
-                           ,UPPER(CAST(SERVERPROPERTY('ComputerNamePhysicalNetBIOS') AS VARCHAR)) AS ServerName
-                           ,SERVERPROPERTY('IsClustered') AS IsClustered
-                           ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
-                           ,NULL AS AvailabilityGroupName
-                           ,NULL AS AvailabilityGroupListenerName
-                           ,NULL AS HighAvailabilityRoleDesc
-                           ,'Standalone' AS SQLServerClusteringMethod
-                           ,@@VERSION AS SQLServerVersion;  
-                     END
-              END
-       END
+              SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName
+              ,UPPER(ar.replica_server_name) AS ServerName
+              ,SERVERPROPERTY('IsClustered') AS IsClustered
+              ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
+              ,ag.name AS AvailabilityGroupName
+              ,agl.dns_name AS AvailabilityGroupListenerName
+              ,CASE ar.replica_server_name WHEN dhags.primary_replica THEN 'PRIMARY'
+              ELSE 'SECONDARY'
+              END AS HighAvailabilityRoleDesc
+              ,'AG' AS SQLServerClusteringMethod
+              ,@@VERSION AS SQLServerVersion
+              FROM sys.availability_groups AS ag
+              LEFT OUTER JOIN sys.availability_replicas AS ar ON ag.group_id = ar.group_id
+              LEFT OUTER JOIN sys.availability_group_listeners AS agl ON ag.group_id = agl.group_id
+              LEFT OUTER JOIN sys.dm_hadr_availability_group_states as dhags ON ag.group_id = dhags.group_id
+              ORDER BY 5,2;  
+       END;
+
+       IF @HAType = 'STANDALONE'
+       BEGIN
+              SELECT UPPER(CAST(SERVERPROPERTY('ServerName') AS VARCHAR)) AS InstanceName  
+              ,UPPER(CAST(SERVERPROPERTY('ComputerNamePhysicalNetBIOS') AS VARCHAR)) AS ServerName
+              ,SERVERPROPERTY('IsClustered') AS IsClustered
+              ,SERVERPROPERTY ('IsHadrEnabled') AS IsAvailabilityGroupEnabled
+              ,NULL AS AvailabilityGroupName
+              ,NULL AS AvailabilityGroupListenerName
+              ,NULL AS HighAvailabilityRoleDesc
+              ,'Standalone' AS SQLServerClusteringMethod
+              ,@@VERSION AS SQLServerVersion  
+       END;
 END;
 
 
